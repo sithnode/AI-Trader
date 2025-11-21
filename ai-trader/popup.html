@@ -11,10 +11,10 @@
     
     body {
       width: 420px;
-      min-height: 550px;
+      min-height: 500px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: #fff;
+      background: #0f0f1e;
+      color: #e0e0e0;
     }
     
     .container {
@@ -36,11 +36,62 @@
       opacity: 0.9;
     }
     
+    .config-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(255,255,255,0.15);
+      padding: 12px 15px;
+      border-radius: 10px;
+      margin-bottom: 15px;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    
+    .config-header:hover {
+      background: rgba(255,255,255,0.2);
+    }
+    
+    .config-header-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    
+    .provider-badge {
+      background: rgba(255,255,255,0.3);
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    
+    .config-toggle {
+      font-size: 20px;
+      transition: transform 0.3s;
+    }
+    
+    .config-toggle.expanded {
+      transform: rotate(180deg);
+    }
+    
     .api-key-section {
       background: rgba(255,255,255,0.1);
       padding: 15px;
       border-radius: 10px;
       margin-bottom: 15px;
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease-out, padding 0.3s ease-out;
+    }
+    
+    .api-key-section.expanded {
+      max-height: 500px;
+      padding: 15px;
+    }
+    
+    .api-key-section.collapsed {
+      padding: 0 15px;
     }
     
     label {
@@ -121,17 +172,39 @@
     
     .recommendation-item {
       background: rgba(255,255,255,0.1);
-      padding: 10px;
+      padding: 12px;
       border-radius: 5px;
       margin-bottom: 10px;
       font-size: 13px;
-      line-height: 1.5;
+      line-height: 1.6;
     }
     
     .timestamp {
       font-size: 10px;
       opacity: 0.7;
       margin-bottom: 5px;
+    }
+    
+    .signal-indicator {
+      display: inline-block;
+      margin-right: 5px;
+      font-size: 16px;
+    }
+    
+    .signal-buy {
+      color: #4caf50;
+    }
+    
+    .signal-sell {
+      color: #f44336;
+    }
+    
+    .signal-hold {
+      color: #ff9800;
+    }
+    
+    .signal-warning {
+      color: #ffeb3b;
     }
     
     .loading {
@@ -187,6 +260,44 @@
       margin-top: 5px;
       line-height: 1.4;
     }
+    
+    .recommendation-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid rgba(255,255,255,0.2);
+    }
+    
+    .recommendation-action {
+      font-size: 18px;
+      font-weight: bold;
+      padding: 4px 10px;
+      border-radius: 5px;
+      background: rgba(255,255,255,0.2);
+    }
+    
+    .confidence-badge {
+      font-size: 10px;
+      padding: 3px 8px;
+      border-radius: 10px;
+      background: rgba(255,255,255,0.2);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    
+    .confidence-high {
+      background: rgba(76, 175, 80, 0.3);
+    }
+    
+    .confidence-medium {
+      background: rgba(255, 152, 0, 0.3);
+    }
+    
+    .confidence-low {
+      background: rgba(244, 67, 54, 0.3);
+    }
   </style>
 </head>
 <body>
@@ -196,8 +307,17 @@
       <p class="subtitle">Real-time trading insights powered by your AI</p>
     </div>
     
-    <div class="api-key-section">
-      <label for="llmProvider">LLM Provider</label>
+    <div class="config-header" id="configHeader">
+      <div class="config-header-left">
+        <span>⚙️</span>
+        <span style="font-weight: 600; font-size: 13px;">LLM Configuration</span>
+        <span class="provider-badge" id="currentProvider">Not configured</span>
+      </div>
+      <span class="config-toggle" id="configToggle">🔽</span>
+    </div>
+    
+    <div class="api-key-section expanded" id="configSection">
+      <label for="llmProvider">🤖 LLM Provider</label>
       <select id="llmProvider">
         <option value="anthropic">Anthropic (Claude)</option>
         <option value="openai">OpenAI (GPT)</option>
@@ -206,14 +326,14 @@
         <option value="custom">Custom API Endpoint</option>
       </select>
       
-      <label for="apiKey">API Key</label>
+      <label for="apiKey">🔑 API Key</label>
       <input type="password" id="apiKey" placeholder="Enter your API key..." />
       
-      <label for="modelName">Model Name</label>
+      <label for="modelName">🎯 Model Name</label>
       <input type="text" id="modelName" class="model-input" placeholder="e.g., claude-sonnet-4-20250514" />
       
       <div id="customEndpoint" class="hidden">
-        <label for="apiEndpoint">API Endpoint URL</label>
+        <label for="apiEndpoint">🌐 API Endpoint URL</label>
         <input type="text" id="apiEndpoint" placeholder="https://api.example.com/v1/chat" />
       </div>
       
@@ -226,8 +346,8 @@
     
     <button class="btn-primary" id="captureBtn">📸 Capture & Analyze Chart</button>
     
-    <div class="api-key-section">
-      <label>Auto-Refresh Interval</label>
+    <div class="api-key-section" style="max-height: none; padding: 15px;">
+      <label>⏱️ Auto-Refresh Interval</label>
       <div class="interval-selector">
         <button class="interval-btn" data-interval="0">Off</button>
         <button class="interval-btn active" data-interval="30">30s</button>
@@ -236,14 +356,12 @@
       </div>
     </div>
     
-    <button class="btn-secondary" id="stopBtn" class="hidden">⏸️ Stop Auto-Refresh</button>
-    
     <div class="loading" id="loading">
       <div class="spinner"></div>
-      <p style="margin-top: 10px;">Analyzing chart...</p>
+      <p style="margin-top: 10px;">🔍 Analyzing chart...</p>
     </div>
     
-    <div class="status" id="status">Configure your LLM provider above</div>
+    <div class="status" id="status">⚡ Configure your LLM provider above</div>
     
     <div class="recommendations" id="recommendations"></div>
   </div>

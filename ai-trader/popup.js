@@ -3,6 +3,7 @@ console.log('🚀 popup.js loaded!');
 
 let autoRefreshInterval = null;
 let currentInterval = 30;
+let isConfigExpanded = true;
 
 // Provider configurations
 const providerConfigs = {
@@ -40,6 +41,31 @@ const providerConfigs = {
 
 console.log('📋 Provider configs loaded:', Object.keys(providerConfigs));
 
+// Configuration collapse/expand handler
+const configHeader = document.getElementById('configHeader');
+const configSection = document.getElementById('configSection');
+const configToggle = document.getElementById('configToggle');
+const currentProviderBadge = document.getElementById('currentProvider');
+
+if (configHeader) {
+  configHeader.addEventListener('click', () => {
+    isConfigExpanded = !isConfigExpanded;
+    
+    if (isConfigExpanded) {
+      configSection.classList.add('expanded');
+      configSection.classList.remove('collapsed');
+      configToggle.classList.add('expanded');
+    } else {
+      configSection.classList.remove('expanded');
+      configSection.classList.add('collapsed');
+      configToggle.classList.remove('expanded');
+    }
+    
+    console.log('🔄 Config section toggled:', isConfigExpanded ? 'expanded' : 'collapsed');
+  });
+  console.log('✅ Config header listener attached');
+}
+
 // Load saved configuration
 console.log('💾 Loading saved configuration...');
 chrome.storage.local.get(['llmProvider', 'apiKey', 'modelName', 'apiEndpoint', 'refreshInterval'], (result) => {
@@ -48,6 +74,18 @@ chrome.storage.local.get(['llmProvider', 'apiKey', 'modelName', 'apiEndpoint', '
   if (result.llmProvider) {
     document.getElementById('llmProvider').value = result.llmProvider;
     updateProviderUI(result.llmProvider);
+    
+    // Update the current provider badge
+    const providerName = providerConfigs[result.llmProvider].name;
+    currentProviderBadge.textContent = providerName;
+    
+    // Auto-collapse if already configured
+    if (result.apiKey && result.modelName) {
+      isConfigExpanded = false;
+      configSection.classList.remove('expanded');
+      configSection.classList.add('collapsed');
+      configToggle.classList.remove('expanded');
+    }
   }
   if (result.apiKey) {
     document.getElementById('apiKey').value = result.apiKey;
@@ -65,7 +103,7 @@ chrome.storage.local.get(['llmProvider', 'apiKey', 'modelName', 'apiEndpoint', '
   
   // Update status if configured
   if (result.apiKey && result.llmProvider) {
-    showStatus('Configuration loaded - Ready to analyze', 'success');
+    showStatus('✅ Configuration loaded - Ready to analyze', 'success');
   }
 });
 
@@ -504,7 +542,12 @@ async function callCustomAPI(base64Image, config) {
 }
 
 function getAnalysisPrompt() {
-  return `Analyze this stock/futures trading chart. Provide:
+  return `Analyze this stock/futures trading chart. 
+
+CRITICAL: Start your response with EXACTLY this format on the first line:
+RATING: [Bullish/Bearish/Neutral] | CONFIDENCE: [High/Medium/Low]
+
+Then provide detailed analysis:
 
 1. **Current Trend**: What's the overall market direction?
 2. **Key Support/Resistance Levels**: Identify critical price levels
@@ -515,10 +558,9 @@ function getAnalysisPrompt() {
    - Stop loss suggestion
    - Target price
    - Risk/Reward ratio
-5. **Confidence Level**: Rate your confidence (Low/Medium/High)
-6. **Key Risks**: What could invalidate this analysis?
+5. **Key Risks**: What could invalidate this analysis?
 
-Be specific and actionable. Format your response clearly.`;
+Be specific and actionable. Remember to start with the RATING line exactly as specified.`;
 }
 
 function displayRecommendation(analysis, provider) {
@@ -527,20 +569,80 @@ function displayRecommendation(analysis, provider) {
   const timestamp = new Date().toLocaleTimeString();
   const providerName = providerConfigs[provider].name;
   
+  // Parse rating and confidence from the first line
+  let rating = 'Neutral';
+  let confidence = 'Medium';
+  let analysisText = analysis;
+  
+  const ratingMatch = analysis.match(/RATING:\s*(Bullish|Bearish|Neutral)/i);
+  const confidenceMatch = analysis.match(/CONFIDENCE:\s*(High|Medium|Low)/i);
+  
+  if (ratingMatch) {
+    rating = ratingMatch[1];
+    // Remove the rating line from display
+    analysisText = analysis.replace(/RATING:.*?\n/i, '');
+  }
+  
+  if (confidenceMatch) {
+    confidence = confidenceMatch[1];
+    // Remove the confidence line from display
+    analysisText = analysisText.replace(/CONFIDENCE:.*?\n/i, '');
+  }
+  
+  // Determine emoji and color based on rating
+  let ratingEmoji = '⚖️';
+  let ratingClass = '';
+  
+  if (rating.toLowerCase() === 'bullish') {
+    ratingEmoji = '🐂';
+    ratingClass = 'signal-buy';
+  } else if (rating.toLowerCase() === 'bearish') {
+    ratingEmoji = '🐻';
+    ratingClass = 'signal-sell';
+  }
+  
+  // Confidence badge class
+  let confidenceClass = 'confidence-medium';
+  if (confidence.toLowerCase() === 'high') {
+    confidenceClass = 'confidence-high';
+  } else if (confidence.toLowerCase() === 'low') {
+    confidenceClass = 'confidence-low';
+  }
+  
   const item = document.createElement('div');
   item.className = 'recommendation-item';
   item.innerHTML = `
-    <div class="timestamp">⏰ ${timestamp} | 🤖 ${providerName}</div>
-    <div style="white-space: pre-wrap;">${analysis}</div>
+    <div class="recommendation-header">
+      <div>
+        <div class="timestamp">⏰ ${timestamp} | 🤖 ${providerName}</div>
+        <div class="recommendation-action ${ratingClass}">
+          ${ratingEmoji} ${rating.toUpperCase()}
+        </div>
+      </div>
+      <div class="confidence-badge ${confidenceClass}">
+        ${confidence} Confidence
+      </div>
+    </div>
+    <div style="white-space: pre-wrap; line-height: 1.6;">${analysisText.trim()}</div>
   `;
   
   container.insertBefore(item, container.firstChild);
   
-  // Keep only last 5 recommendations
+  // Save this session to persistent storage
+  saveChatSessionToPersistentStorage({
+    analysis: analysisText.trim(),
+    rating: rating,
+    confidence: confidence,
+    provider: providerName,
+    timestamp: new Date().toISOString(),
+    displayTimestamp: timestamp
+  });
+  
+  // Keep only last 5 recommendations in UI
   while (container.children.length > 5) {
     container.removeChild(container.lastChild);
   }
-  console.log('✅ Recommendation displayed');
+  console.log('✅ Recommendation displayed with rating:', rating, 'confidence:', confidence);
 }
 
 function showStatus(message, type) {
@@ -558,6 +660,163 @@ function showStatus(message, type) {
   }
 }
 
+// Session Management Functions
+async function saveChatSessionToPersistentStorage(sessionData) {
+  try {
+    const response = await chrome.runtime.sendMessage({
+      action: 'saveChatSession',
+      data: sessionData
+    });
+    
+    if (response.success) {
+      console.log('💾 Session saved to persistent storage:', response.sessionId);
+    } else {
+      console.error('❌ Failed to save session:', response.error);
+    }
+  } catch (error) {
+    console.error('❌ Error saving session:', error);
+  }
+}
+
+async function loadTodaysSessions() {
+  try {
+    const response = await chrome.runtime.sendMessage({
+      action: 'getChatSessions'
+    });
+    
+    if (response.success) {
+      console.log('📖 Loaded today\'s sessions:', response.sessions.length);
+      return response.sessions;
+    } else {
+      console.error('❌ Failed to load sessions:', response.error);
+      return [];
+    }
+  } catch (error) {
+    console.error('❌ Error loading sessions:', error);
+    return [];
+  }
+}
+
+async function getSessionStatistics() {
+  try {
+    const response = await chrome.runtime.sendMessage({
+      action: 'getSessionStats'
+    });
+    
+    if (response.success) {
+      console.log('📊 Session statistics:', response.stats);
+      return response.stats;
+    } else {
+      console.error('❌ Failed to get session stats:', response.error);
+      return null;
+    }
+  } catch (error) {
+    console.error('❌ Error getting session stats:', error);
+    return null;
+  }
+}
+
+async function clearTodaysCache() {
+  try {
+    const response = await chrome.runtime.sendMessage({
+      action: 'clearTodaysSessions'
+    });
+    
+    if (response.success) {
+      console.log('🧹 Today\'s cache cleared successfully');
+      // Also clear the UI
+      const container = document.getElementById('recommendations');
+      container.innerHTML = '';
+      showStatus('Today\'s sessions cleared', 'success');
+    } else {
+      console.error('❌ Failed to clear cache:', response.error);
+      showStatus('Failed to clear cache', 'error');
+    }
+  } catch (error) {
+    console.error('❌ Error clearing cache:', error);
+    showStatus('Error clearing cache', 'error');
+  }
+}
+
+// Load and display sessions from persistent storage on popup open
+async function loadAndDisplayStoredSessions() {
+  const sessions = await loadTodaysSessions();
+  const container = document.getElementById('recommendations');
+  
+  // Display sessions in reverse chronological order (newest first)
+  sessions.reverse().slice(0, 5).forEach(session => {
+    const item = document.createElement('div');
+    item.className = 'recommendation-item';
+    
+    // Determine rating styling
+    let ratingEmoji = '⚖️';
+    let ratingClass = '';
+    
+    if (session.rating && session.rating.toLowerCase() === 'bullish') {
+      ratingEmoji = '🐂';
+      ratingClass = 'signal-buy';
+    } else if (session.rating && session.rating.toLowerCase() === 'bearish') {
+      ratingEmoji = '🐻';
+      ratingClass = 'signal-sell';
+    }
+    
+    // Confidence badge class
+    let confidenceClass = 'confidence-medium';
+    if (session.confidence && session.confidence.toLowerCase() === 'high') {
+      confidenceClass = 'confidence-high';
+    } else if (session.confidence && session.confidence.toLowerCase() === 'low') {
+      confidenceClass = 'confidence-low';
+    }
+    
+    const displayTime = session.displayTimestamp || new Date(session.timestamp).toLocaleTimeString();
+    
+    item.innerHTML = `
+      <div class="recommendation-header">
+        <div>
+          <div class="timestamp">⏰ ${displayTime} | 🤖 ${session.provider} 💾</div>
+          <div class="recommendation-action ${ratingClass}">
+            ${ratingEmoji} ${(session.rating || 'NEUTRAL').toUpperCase()}
+          </div>
+        </div>
+        <div class="confidence-badge ${confidenceClass}">
+          ${session.confidence || 'Medium'} Confidence
+        </div>
+      </div>
+      <div style="white-space: pre-wrap; line-height: 1.6;">${session.analysis}</div>
+    `;
+    
+    container.appendChild(item);
+  });
+  
+  console.log(`📚 Displayed ${Math.min(sessions.length, 5)} stored sessions`);
+}
+
+// Load stored sessions when popup opens
+loadAndDisplayStoredSessions();
+
+// Display session statistics
+getSessionStatistics().then(stats => {
+  if (stats) {
+    console.log(`📊 Session Stats: ${stats.todaySessions} today, ${stats.totalSessions} total across ${stats.totalDays} days`);
+    
+    // Add stats to status if there are sessions
+    if (stats.totalSessions > 0) {
+      const statusElement = document.getElementById('status');
+      const currentStatus = statusElement.textContent;
+      const statsText = `💾 ${stats.todaySessions} sessions today, ${stats.totalSessions} total`;
+      
+      if (!currentStatus || currentStatus.trim() === '') {
+        showStatus(statsText, 'info');
+      }
+    }
+  }
+});
+
+// Add clear cache functionality (can be triggered via console or future UI)
+window.clearTodaysCache = clearTodaysCache;
+window.getSessionStats = getSessionStatistics;
+window.loadSessions = loadTodaysSessions;
+
 // Auto-start refresh if enabled
 chrome.storage.local.get(['refreshInterval'], (result) => {
   if (result.refreshInterval && result.refreshInterval > 0) {
@@ -567,3 +826,4 @@ chrome.storage.local.get(['refreshInterval'], (result) => {
 });
 
 console.log('✅ popup.js initialization complete!');
+console.log('🔧 Available commands: clearTodaysCache(), getSessionStats(), loadSessions()');
