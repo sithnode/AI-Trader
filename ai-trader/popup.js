@@ -925,23 +925,25 @@ async function callCustomAPI(base64Image, config) {
 function getAnalysisPrompt() {
   return `Analyze this stock/futures trading chart. 
 
-CRITICAL: Start your response with EXACTLY this format on the first line:
-RATING: [Bullish/Bearish/Neutral] | CONFIDENCE: [High/Medium/Low]
+CRITICAL: Analyze this live trading chart and return a decisive, actionable trade plan.
 
-Then provide detailed analysis:
+Your FIRST BLOCK must follow this exact structure:
 
-1. **Current Trend**: What's the overall market direction?
-2. **Key Support/Resistance Levels**: Identify critical price levels
-3. **Technical Indicators**: What do you observe (if visible)?
-4. **Trading Recommendation**: 
-   - Action: BUY, SELL, or HOLD
-   - Entry point (if applicable)
-   - Stop loss suggestion
-   - Target price
-   - Risk/Reward ratio
-5. **Key Risks**: What could invalidate this analysis?
+Action: [BUY/SELL/NO TRADE]  
+Entry: [Exact price or range]  
+Exit Target: [Exact price or range]  
+Stop Limit: [Exact stop price]  
+Time Period: [# of bars or time estimate]  
 
-Be specific and actionable. Remember to start with the RATING line exactly as specified.`;
+After the action block, provide supplemental reasoning:
+
+1. Trend: Describe the micro-trend (next 1–5 candles).  
+2. Pattern: Identify any formations (double top, wedge, breakdown, reversal, etc.).  
+3. Key Levels: Nearest support/resistance zones.  
+4. Indicators: Only the indicators relevant to the trade.  
+5. Invalidation: What cancels the setup immediately.  
+
+Keep everything concise, specific, and execution-ready. No fluff.`;
 }
 
 function displayRecommendation(analysis, provider) {
