@@ -321,6 +321,28 @@ async function reloadAnalysisPrompt() {
   return newPrompt;
 }
 
+// Reload prompt from file (clear cache and reload)
+async function reloadPrompt() {
+  try {
+    // Clear the cached prompt
+    cachedAnalysisPrompt = null;
+    console.log('🔄 Prompt cache cleared');
+    
+    // Load fresh prompt
+    const newPrompt = await getAnalysisPrompt();
+    
+    if (newPrompt) {
+      showStatus('📄 Analysis prompt reloaded', 'success');
+      console.log('✅ Analysis prompt reloaded successfully');
+      console.log('📄 New prompt length:', newPrompt.length, 'characters');
+      return newPrompt;
+    }
+  } catch (error) {
+    console.error('❌ Error reloading prompt:', error);
+    showStatus('Error reloading prompt', 'error');
+  }
+}
+
 // Add global functions for console access
 window.resetWindow = resetWindowSize;
 window.toggleAnalysis = toggleRecommendationsExpansion;
@@ -329,6 +351,9 @@ window.clearBadge = clearNotificationBadge;
 window.getNotificationSettings = getNotificationSettings;
 window.resetTabTracking = resetTabTracking;
 window.checkTabChange = checkTabChange;
+window.clearAllAnalyses = clearAllAnalyses;
+window.clearAllAnalysesQuick = clearAllAnalysesQuick;
+window.reloadPrompt = reloadPrompt;
 window.reloadPrompt = reloadAnalysisPrompt;
 
 // Initialize drag and resize on load
@@ -1159,6 +1184,88 @@ async function clearTodaysCache() {
   }
 }
 
+// Clear all analyses with confirmation
+async function clearAllAnalyses() {
+  // Show confirmation dialog
+  const confirmed = confirm('🗑️ Clear All Analyses\n\nThis will permanently delete:\n• All today\'s analysis sessions\n• Current UI display\n• Notification badges\n\nThis action cannot be undone. Continue?');
+  
+  if (!confirmed) {
+    console.log('🚫 Clear operation cancelled by user');
+    return;
+  }
+  
+  try {
+    // Clear persistent storage
+    const response = await chrome.runtime.sendMessage({
+      action: 'clearTodaysSessions'
+    });
+    
+    if (response.success) {
+      // Clear the UI immediately
+      const container = document.getElementById('recommendations');
+      container.innerHTML = '';
+      
+      // Clear notification badge
+      await chrome.runtime.sendMessage({ action: 'clearBadge' });
+      
+      // Update notification button
+      updateNotificationButton();
+      
+      // Show success message
+      showStatus('🗑️ All analyses cleared successfully', 'success');
+      console.log('🗑️ All analyses cleared successfully');
+      
+      // Brief visual feedback
+      const trashBtn = document.querySelector('button[onclick="clearAllAnalyses()"]');
+      if (trashBtn) {
+        const originalBg = trashBtn.style.background;
+        trashBtn.style.background = 'rgba(76, 175, 80, 0.5)';
+        trashBtn.textContent = '✅';
+        
+        setTimeout(() => {
+          trashBtn.style.background = originalBg;
+          trashBtn.textContent = '🗑️';
+        }, 1500);
+      }
+      
+    } else {
+      console.error('❌ Failed to clear analyses:', response.error);
+      showStatus('Failed to clear analyses', 'error');
+    }
+  } catch (error) {
+    console.error('❌ Error clearing analyses:', error);
+    showStatus('Error clearing analyses', 'error');
+  }
+}
+
+// Quick clear without confirmation (for console/advanced users)
+async function clearAllAnalysesQuick() {
+  try {
+    // Clear persistent storage
+    const response = await chrome.runtime.sendMessage({
+      action: 'clearTodaysSessions'
+    });
+    
+    if (response.success) {
+      // Clear the UI
+      const container = document.getElementById('recommendations');
+      container.innerHTML = '';
+      
+      // Clear notification badge
+      await chrome.runtime.sendMessage({ action: 'clearBadge' });
+      
+      // Update notification button
+      updateNotificationButton();
+      
+      showStatus('🗑️ All analyses cleared (quick)', 'success');
+      console.log('🗑️ All analyses cleared (quick mode)');
+    }
+  } catch (error) {
+    console.error('❌ Error in quick clear:', error);
+    showStatus('Error in quick clear', 'error');
+  }
+}
+
 // Load and display sessions from persistent storage on popup open
 async function loadAndDisplayStoredSessions() {
   const sessions = await loadTodaysSessions();
@@ -1296,8 +1403,13 @@ console.log('    resetTabTracking() - Reset to current tab/page');
 console.log('    checkTabChange() - Manually check for tab changes');
 console.log('  📄 Analysis Prompt:');
 console.log('    reloadPrompt() - Reload prompt from analysis-prompt.txt');
+console.log('  🗑️ Clear Functions:');
+console.log('    clearAllAnalyses() - Clear all analyses (with confirmation)');
+console.log('    clearAllAnalysesQuick() - Clear all analyses (no confirmation)');
+console.log('    clearTodaysCache() - Clear today\'s cached sessions only');
 console.log('  ⌨️ Keyboard Shortcuts:');
 console.log('    Ctrl/Cmd + R - Reset window');
 console.log('    Double-click header - Reset window');
 console.log('    Escape - Cancel drag/resize');
 console.log('  🤖 Auto-refresh will stop if you switch tabs or navigate away');
+console.log('  🗑️ Click the trash button or use clearAllAnalyses() to clear everything');
