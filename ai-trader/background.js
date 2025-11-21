@@ -208,6 +208,87 @@ async function getSessionStats() {
   }
 }
 
+// Notification management
+let analysisCount = 0;
+let lastAnalysisTime = null;
+
+// Update extension badge with analysis count
+async function updateBadge(count = null) {
+  if (count === null) {
+    count = analysisCount;
+  }
+  
+  try {
+    if (count > 0) {
+      await chrome.action.setBadgeText({ text: count.toString() });
+      await chrome.action.setBadgeBackgroundColor({ color: '#4CAF50' });
+      console.log('🔔 Badge updated:', count);
+    } else {
+      await chrome.action.setBadgeText({ text: '' });
+      console.log('🔔 Badge cleared');
+    }
+  } catch (error) {
+    console.error('❌ Error updating badge:', error);
+  }
+}
+
+// Show desktop notification for new analysis
+async function showAnalysisNotification(analysisData) {
+  try {
+    // Check if notifications are enabled
+    const settings = await chrome.storage.local.get(['notificationsEnabled']);
+    if (settings.notificationsEnabled === false) {
+      console.log('🔕 Notifications disabled by user');
+      return;
+    }
+
+    const notificationId = `analysis_${Date.now()}`;
+    const rating = analysisData.rating || 'Neutral';
+    const confidence = analysisData.confidence || 'Medium';
+    
+    let icon = '📊';
+    if (rating.toLowerCase() === 'bullish') {
+      icon = '🐂';
+    } else if (rating.toLowerCase() === 'bearish') {
+      icon = '🐻';
+    }
+    
+    await chrome.notifications.create(notificationId, {
+      type: 'basic',
+      iconUrl: 'icon128.png',
+      title: `${icon} New Analysis: ${rating.toUpperCase()}`,
+      message: `Confidence: ${confidence}\nClick to view details`,
+      priority: 1
+    });
+    
+    console.log('🔔 Desktop notification sent:', notificationId);
+    
+    // Auto-clear notification after 10 seconds
+    setTimeout(() => {
+      chrome.notifications.clear(notificationId);
+    }, 10000);
+    
+  } catch (error) {
+    console.error('❌ Error showing notification:', error);
+  }
+}
+
+// Handle notification clicks
+chrome.notifications.onClicked.addListener((notificationId) => {
+  if (notificationId.startsWith('analysis_')) {
+    // Open the extension popup or focus on it
+    chrome.action.openPopup();
+    console.log('🔔 Notification clicked, opening popup');
+  }
+});
+
+// Reset badge count when popup is opened
+chrome.action.onClicked.addListener(() => {
+  analysisCount = 0;
+  updateBadge(0);
+  console.log('🔔 Badge reset - popup opened');
+});
+
 // Listen for messages from content scripts or popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'analyzeChart') {
@@ -220,7 +301,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   // Handle session management
   if (request.action === 'saveChatSession') {
     saveChatSession(request.data)
-      .then(sessionId => sendResponse({ success: true, sessionId }))
+      .then(sessionId => {
+        // Increment analysis count and update badge
+        analysisCount++;
+        lastAnalysisTime = new Date();
+        updateBadge();
+        
+        // Show desktop notification
+        showAnalysisNotification(request.data);
+        
+        sendResponse({ success: true, sessionId });
+      })
       .catch(error => sendResponse({ success: false, error: error.message }));
     return true;
   }
@@ -241,8 +332,43 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   
   if (request.action === 'clearTodaysSessions') {
     clearTodaysSessions()
+      .then(() => {
+        // Reset analysis count when sessions are cleared
+        analysisCount = 0;
+        updateBadge(0);
+        sendResponse({ success: true });
+      })
+      .catch(error => sendResponse({ success: false, error: error.message }));
+    return true;
+  }
+  
+  if (request.action === 'clearBadge') {
+    analysisCount = 0;
+    updateBadge(0)
       .then(() => sendResponse({ success: true }))
       .catch(error => sendResponse({ success: false, error: error.message }));
+    return true;
+  }
+  
+  if (request.action === 'toggleNotifications') {
+    chrome.storage.local.get(['notificationsEnabled'], (result) => {
+      const newState = !result.notificationsEnabled;
+      chrome.storage.local.set({ notificationsEnabled: newState }, () => {
+        sendResponse({ success: true, enabled: newState });
+      });
+    });
+    return true;
+  }
+  
+  if (request.action === 'getNotificationSettings') {
+    chrome.storage.local.get(['notificationsEnabled'], (result) => {
+      sendResponse({ 
+        success: true, 
+        enabled: result.notificationsEnabled !== false,
+        analysisCount: analysisCount,
+        lastAnalysisTime: lastAnalysisTime
+      });
+    });
     return true;
   }
   

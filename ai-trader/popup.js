@@ -5,6 +5,22 @@ let autoRefreshInterval = null;
 let currentInterval = 30;
 let isConfigExpanded = true;
 
+// Dragging and resizing variables
+let isDragging = false;
+let isResizing = false;
+let startX = 0;
+let startY = 0;
+let startWidth = 0;
+let startHeight = 0;
+let startLeft = 0;
+let startTop = 0;
+
+// Tab tracking variables
+let originalTabId = null;
+let originalTabUrl = null;
+let tabCheckInterval = null;
+let wasAutoRefreshActive = false;
+
 // Provider configurations
 const providerConfigs = {
   anthropic: {
@@ -40,6 +56,276 @@ const providerConfigs = {
 };
 
 console.log('📋 Provider configs loaded:', Object.keys(providerConfigs));
+
+// Drag and Resize Functionality
+function initializeDragAndResize() {
+  const dragHandle = document.getElementById('dragHandle');
+  const resizeHandle = document.getElementById('resizeHandle');
+  const body = document.body;
+  
+  if (dragHandle) {
+    // Mouse down on drag handle
+    dragHandle.addEventListener('mousedown', (e) => {
+      isDragging = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      
+      const rect = body.getBoundingClientRect();
+      startLeft = rect.left;
+      startTop = rect.top;
+      
+      body.style.position = 'fixed';
+      body.style.left = startLeft + 'px';
+      body.style.top = startTop + 'px';
+      body.style.zIndex = '10000';
+      
+      dragHandle.style.cursor = 'grabbing';
+      e.preventDefault();
+      
+      console.log('🎯 Started dragging');
+    });
+    
+    console.log('✅ Drag handle initialized');
+  }
+  
+  if (resizeHandle) {
+    // Mouse down on resize handle
+    resizeHandle.addEventListener('mousedown', (e) => {
+      isResizing = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      startWidth = parseInt(window.getComputedStyle(body).width, 10);
+      startHeight = parseInt(window.getComputedStyle(body).height, 10);
+      
+      e.preventDefault();
+      console.log('📏 Started resizing');
+    });
+    
+    console.log('✅ Resize handle initialized');
+  }
+  
+  // Global mouse move handler
+  document.addEventListener('mousemove', (e) => {
+    if (isDragging) {
+      const deltaX = e.clientX - startX;
+      const deltaY = e.clientY - startY;
+      
+      body.style.left = (startLeft + deltaX) + 'px';
+      body.style.top = (startTop + deltaY) + 'px';
+    } else if (isResizing) {
+      const deltaX = e.clientX - startX;
+      const deltaY = e.clientY - startY;
+      
+      const newWidth = Math.max(420, Math.min(800, startWidth + deltaX));
+      const newHeight = Math.max(500, Math.min(800, startHeight + deltaY));
+      
+      body.style.width = newWidth + 'px';
+      body.style.height = newHeight + 'px';
+      
+      // Expand recommendations area when window is larger
+      const recommendations = document.getElementById('recommendations');
+      if (newHeight > 600) {
+        recommendations.classList.add('expanded');
+      } else {
+        recommendations.classList.remove('expanded');
+      }
+    }
+  });
+  
+  // Global mouse up handler
+  document.addEventListener('mouseup', () => {
+    if (isDragging) {
+      isDragging = false;
+      dragHandle.style.cursor = 'move';
+      console.log('✅ Finished dragging');
+    }
+    
+    if (isResizing) {
+      isResizing = false;
+      console.log('✅ Finished resizing');
+    }
+  });
+  
+  // Double-click drag handle to reset position and size
+  if (dragHandle) {
+    dragHandle.addEventListener('dblclick', () => {
+      resetWindowSize();
+      console.log('🔄 Window reset to default size');
+    });
+  }
+  
+  // Add keyboard shortcuts
+  document.addEventListener('keydown', (e) => {
+    // Ctrl/Cmd + R to reset window
+    if ((e.ctrlKey || e.metaKey) && e.key === 'r') {
+      e.preventDefault();
+      resetWindowSize();
+      console.log('⌨️ Window reset via keyboard');
+    }
+    
+    // Escape to stop dragging/resizing
+    if (e.key === 'Escape') {
+      if (isDragging || isResizing) {
+        isDragging = false;
+        isResizing = false;
+        dragHandle.style.cursor = 'move';
+        console.log('⏹️ Drag/resize cancelled');
+      }
+    }
+  });
+  
+  console.log('🎮 Drag and resize functionality initialized');
+}
+
+// Reset window to default size and position
+function resetWindowSize() {
+  const body = document.body;
+  body.style.width = '420px';
+  body.style.height = '500px';
+  body.style.position = 'relative';
+  body.style.left = 'auto';
+  body.style.top = 'auto';
+  body.style.zIndex = 'auto';
+  
+  // Reset recommendations area
+  const recommendations = document.getElementById('recommendations');
+  recommendations.classList.remove('expanded');
+  
+  showStatus('🔄 Window reset to default size', 'success');
+}
+
+// Add expand/collapse functionality for recommendations
+function toggleRecommendationsExpansion() {
+  const recommendations = document.getElementById('recommendations');
+  const isExpanded = recommendations.classList.contains('expanded');
+  
+  if (isExpanded) {
+    recommendations.classList.remove('expanded');
+    showStatus('📉 Analysis view collapsed', 'info');
+  } else {
+    recommendations.classList.add('expanded');
+    showStatus('📈 Analysis view expanded', 'info');
+  }
+}
+
+// Notification Management
+async function showInAppNotification(analysisData) {
+  const rating = analysisData.rating || 'Neutral';
+  const confidence = analysisData.confidence || 'Medium';
+  
+  let icon = '📊';
+  let bgColor = 'rgba(255, 255, 255, 0.2)';
+  
+  if (rating.toLowerCase() === 'bullish') {
+    icon = '🐂';
+    bgColor = 'rgba(76, 175, 80, 0.3)';
+  } else if (rating.toLowerCase() === 'bearish') {
+    icon = '🐻';
+    bgColor = 'rgba(244, 67, 54, 0.3)';
+  }
+  
+  // Create notification element
+  const notification = document.createElement('div');
+  notification.style.cssText = `
+    position: fixed;
+    top: 50px;
+    right: 20px;
+    background: ${bgColor};
+    color: white;
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    z-index: 10001;
+    border: 1px solid rgba(255,255,255,0.3);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    transform: translateX(400px);
+    transition: transform 0.3s ease;
+  `;
+  
+  notification.innerHTML = `${icon} New Analysis: ${rating.toUpperCase()}<br><small>Confidence: ${confidence}</small>`;
+  
+  document.body.appendChild(notification);
+  
+  // Animate in
+  setTimeout(() => {
+    notification.style.transform = 'translateX(0)';
+  }, 100);
+  
+  // Auto-remove after 4 seconds
+  setTimeout(() => {
+    notification.style.transform = 'translateX(400px)';
+    setTimeout(() => {
+      if (notification.parentNode) {
+        document.body.removeChild(notification);
+      }
+    }, 300);
+  }, 4000);
+  
+  console.log('🔔 In-app notification shown');
+}
+
+async function toggleNotifications() {
+  try {
+    const response = await chrome.runtime.sendMessage({
+      action: 'toggleNotifications'
+    });
+    
+    if (response.success) {
+      const status = response.enabled ? 'enabled' : 'disabled';
+      showStatus(`🔔 Notifications ${status}`, 'success');
+      console.log('🔔 Notifications toggled:', response.enabled);
+      
+      // Update button appearance
+      updateNotificationButton();
+      
+      return response.enabled;
+    }
+  } catch (error) {
+    console.error('❌ Error toggling notifications:', error);
+    showStatus('Error toggling notifications', 'error');
+  }
+}
+
+async function getNotificationSettings() {
+  try {
+    const response = await chrome.runtime.sendMessage({
+      action: 'getNotificationSettings'
+    });
+    
+    if (response.success) {
+      console.log('🔔 Notification settings:', response);
+      return response;
+    }
+  } catch (error) {
+    console.error('❌ Error getting notification settings:', error);
+  }
+  return null;
+}
+
+async function clearNotificationBadge() {
+  try {
+    await chrome.runtime.sendMessage({ action: 'clearBadge' });
+    console.log('🔔 Badge cleared manually');
+  } catch (error) {
+    console.error('❌ Error clearing badge:', error);
+  }
+}
+
+// Add global functions for console access
+window.resetWindow = resetWindowSize;
+window.toggleAnalysis = toggleRecommendationsExpansion;
+window.toggleNotifications = toggleNotifications;
+window.clearBadge = clearNotificationBadge;
+window.getNotificationSettings = getNotificationSettings;
+window.resetTabTracking = resetTabTracking;
+window.checkTabChange = checkTabChange;
+
+// Initialize drag and resize on load
+initializeDragAndResize();
+
+// Initialize tab tracking
+initializeTabTracking();
 
 // Configuration collapse/expand handler
 const configHeader = document.getElementById('configHeader');
@@ -200,7 +486,7 @@ if (captureBtn) {
 // Interval selector
 document.querySelectorAll('.interval-btn').forEach((btn, index) => {
   console.log(`🔘 Setting up interval button ${index}`);
-  btn.addEventListener('click', (e) => {
+  btn.addEventListener('click', async (e) => {
     const interval = parseInt(e.target.dataset.interval);
     console.log('⏱️ Interval button clicked:', interval);
     currentInterval = interval;
@@ -208,6 +494,8 @@ document.querySelectorAll('.interval-btn').forEach((btn, index) => {
     updateIntervalButtons();
     
     if (interval > 0) {
+      // Reset tab tracking to current page when manually starting auto-refresh
+      await resetTabTracking();
       startAutoRefresh();
     } else {
       stopAutoRefresh();
@@ -226,6 +514,92 @@ function updateIntervalButtons() {
   });
 }
 
+async function initializeTabTracking() {
+  try {
+    // Get current tab when extension starts
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    originalTabId = tab.id;
+    originalTabUrl = tab.url;
+    
+    console.log('📍 Original tab tracked:', { id: originalTabId, url: originalTabUrl });
+    
+    // Start monitoring tab changes
+    startTabMonitoring();
+    
+  } catch (error) {
+    console.error('❌ Error initializing tab tracking:', error);
+  }
+}
+
+function startTabMonitoring() {
+  // Stop any existing monitoring
+  if (tabCheckInterval) {
+    clearInterval(tabCheckInterval);
+  }
+  
+  // Check tab every 2 seconds when auto-refresh is active
+  tabCheckInterval = setInterval(async () => {
+    if (autoRefreshInterval) { // Only check if auto-refresh is active
+      await checkTabChange();
+    }
+  }, 2000);
+  
+  console.log('👁️ Tab monitoring started');
+}
+
+function stopTabMonitoring() {
+  if (tabCheckInterval) {
+    clearInterval(tabCheckInterval);
+    tabCheckInterval = null;
+    console.log('👁️ Tab monitoring stopped');
+  }
+}
+
+async function checkTabChange() {
+  try {
+    const [currentTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    
+    // Check if we're on a different tab or URL
+    const isOriginalTab = currentTab.id === originalTabId;
+    const isSameUrl = currentTab.url === originalTabUrl;
+    
+    if (!isOriginalTab || !isSameUrl) {
+      console.log('🔄 Tab change detected:');
+      console.log('  Original:', { id: originalTabId, url: originalTabUrl });
+      console.log('  Current:', { id: currentTab.id, url: currentTab.url });
+      
+      // Store that auto-refresh was active
+      wasAutoRefreshActive = true;
+      
+      // Turn off auto-refresh
+      stopAutoRefresh();
+      
+      // Update UI to reflect the change
+      currentInterval = 0;
+      chrome.storage.local.set({ refreshInterval: 0 });
+      updateIntervalButtons();
+      
+      showStatus('🚫 Auto-refresh disabled - tab/page changed', 'info');
+      
+      // Stop monitoring since we've detected the change
+      stopTabMonitoring();
+    }
+  } catch (error) {
+    console.error('❌ Error checking tab change:', error);
+  }
+}
+
+// Function to reset tab tracking (for manual restart)
+async function resetTabTracking() {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  originalTabId = tab.id;
+  originalTabUrl = tab.url;
+  wasAutoRefreshActive = false;
+  
+  console.log('🔄 Tab tracking reset to:', { id: originalTabId, url: originalTabUrl });
+  showStatus('📍 Tab tracking reset to current page', 'success');
+}
+
 function startAutoRefresh() {
   stopAutoRefresh();
   
@@ -236,6 +610,9 @@ function startAutoRefresh() {
       await captureAndAnalyze();
     }, currentInterval * 1000);
     
+    // Start tab monitoring when auto-refresh begins
+    startTabMonitoring();
+    
     showStatus(`Auto-refresh enabled (${currentInterval}s)`, 'info');
   }
 }
@@ -245,6 +622,9 @@ function stopAutoRefresh() {
     console.log('⏸️ Stopping auto-refresh');
     clearInterval(autoRefreshInterval);
     autoRefreshInterval = null;
+    
+    // Stop tab monitoring when auto-refresh stops
+    stopTabMonitoring();
   }
 }
 
@@ -276,6 +656,7 @@ async function captureAndAnalyze() {
     console.log('📷 Capturing screenshot...');
     // Capture screenshot
     const screenshot = await chrome.tabs.captureVisibleTab(null, { format: 'png' });
+
     console.log('✅ Screenshot captured, size:', screenshot.length, 'chars');
     
     showStatus('Analyzing with AI...', 'info');
@@ -670,6 +1051,15 @@ async function saveChatSessionToPersistentStorage(sessionData) {
     
     if (response.success) {
       console.log('💾 Session saved to persistent storage:', response.sessionId);
+      
+      // Show in-app notification
+      showInAppNotification(sessionData);
+      
+      // Clear badge when popup is active (user is viewing)
+      setTimeout(async () => {
+        await chrome.runtime.sendMessage({ action: 'clearBadge' });
+      }, 2000);
+      
     } else {
       console.error('❌ Failed to save session:', response.error);
     }
@@ -825,5 +1215,56 @@ chrome.storage.local.get(['refreshInterval'], (result) => {
   }
 });
 
+// Update notification button appearance
+async function updateNotificationButton() {
+  const settings = await getNotificationSettings();
+  const button = document.getElementById('notificationToggle');
+  
+  if (button && settings) {
+    button.textContent = settings.enabled ? '🔔' : '🔕';
+    button.title = settings.enabled ? 'Disable notifications' : 'Enable notifications';
+    
+    if (settings.analysisCount > 0) {
+      button.style.background = 'rgba(244, 67, 54, 0.4)';
+      button.textContent = `🔔${settings.analysisCount}`;
+    } else {
+      button.style.background = '';
+    }
+  }
+}
+
+// Initialize notification settings display
+getNotificationSettings().then(settings => {
+  if (settings) {
+    const statusText = settings.enabled ? '🔔 Notifications enabled' : '🔕 Notifications disabled';
+    if (settings.analysisCount > 0) {
+      console.log(`📊 ${settings.analysisCount} unread analysis updates`);
+    }
+    updateNotificationButton();
+  }
+});
+
+// Auto-clear badge when popup is opened
+clearNotificationBadge();
+
 console.log('✅ popup.js initialization complete!');
-console.log('🔧 Available commands: clearTodaysCache(), getSessionStats(), loadSessions()');
+console.log('🔧 Available commands:');
+console.log('  📊 Session Management:');
+console.log('    clearTodaysCache() - Clear today\'s sessions');
+console.log('    getSessionStats() - Get session statistics'); 
+console.log('    loadSessions() - Load today\'s sessions');
+console.log('  🎮 Window Controls:');
+console.log('    resetWindow() - Reset window size and position');
+console.log('    toggleAnalysis() - Expand/collapse analysis area');
+console.log('  🔔 Notifications:');
+console.log('    toggleNotifications() - Enable/disable notifications');
+console.log('    clearBadge() - Clear extension badge');
+console.log('    getNotificationSettings() - View notification status');
+console.log('  📍 Tab Tracking:');
+console.log('    resetTabTracking() - Reset to current tab/page');
+console.log('    checkTabChange() - Manually check for tab changes');
+console.log('  ⌨️ Keyboard Shortcuts:');
+console.log('    Ctrl/Cmd + R - Reset window');
+console.log('    Double-click header - Reset window');
+console.log('    Escape - Cancel drag/resize');
+console.log('  🤖 Auto-refresh will stop if you switch tabs or navigate away');

@@ -12,13 +12,65 @@
     body {
       width: 420px;
       min-height: 500px;
+      max-width: 800px;
+      max-height: 800px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       background: #0f0f1e;
       color: #e0e0e0;
+      position: relative;
+      resize: both;
+      overflow: auto;
+      border: 2px solid rgba(255,255,255,0.2);
+      border-radius: 10px;
+    }
+    
+    .drag-handle {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 30px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      cursor: move;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 600;
+      color: white;
+      border-radius: 8px 8px 0 0;
+      z-index: 1000;
+      user-select: none;
+    }
+    
+    .drag-handle:hover {
+      background: linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%);
+    }
+    
+    .resize-handle {
+      position: absolute;
+      bottom: 0;
+      right: 0;
+      width: 20px;
+      height: 20px;
+      background: rgba(255,255,255,0.3);
+      cursor: se-resize;
+      z-index: 1000;
+    }
+    
+    .resize-handle::after {
+      content: "↘";
+      position: absolute;
+      bottom: 2px;
+      right: 2px;
+      font-size: 12px;
+      color: #fff;
     }
     
     .container {
-      padding: 20px;
+      padding: 40px 20px 20px 20px;
+      height: calc(100% - 30px);
+      overflow-y: auto;
     }
     
     .header {
@@ -168,6 +220,14 @@
       margin-top: 15px;
       max-height: 300px;
       overflow-y: auto;
+      resize: vertical;
+      min-height: 100px;
+      border: 1px solid rgba(255,255,255,0.2);
+    }
+    
+    .recommendations.expanded {
+      max-height: 500px;
+      min-height: 200px;
     }
     
     .recommendation-item {
@@ -301,6 +361,10 @@
   </style>
 </head>
 <body>
+  <div class="drag-handle" id="dragHandle">
+    ⋮⋮⋮ Drag to Move • AI Chart Analyzer • ⋮⋮⋮
+  </div>
+  <div class="resize-handle" id="resizeHandle"></div>
   <div class="container">
     <div class="header">
       <h1>📈 AI Chart Analyzer</h1>
@@ -362,6 +426,14 @@
     </div>
     
     <div class="status" id="status">⚡ Configure your LLM provider above</div>
+    
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px; margin-bottom: 5px;">
+      <label style="font-size: 12px; font-weight: 600;">📊 Analysis Results</label>
+      <div style="display: flex; gap: 5px;">
+        <button class="btn-secondary" onclick="toggleNotifications()" style="padding: 4px 8px; font-size: 10px; margin: 0; width: auto;" id="notificationToggle">🔔</button>
+        <button class="btn-secondary" onclick="toggleAnalysis()" style="padding: 4px 8px; font-size: 10px; margin: 0; width: auto;">📈 Expand</button>
+      </div>
+    </div>
     
     <div class="recommendations" id="recommendations"></div>
   </div>
