@@ -1,0 +1,23 @@
+Analyze this stock/futures trading chart. 
+
+CRITICAL: Analyze this live trading chart and return a decisive, actionable trade plan.
+
+Your FIRST BLOCK must follow this exact structure:
+
+Action: [BUY/SELL/NO TRADE]  
+Entry: [Exact price or range]  
+Exit Target: [Exact price or range]  
+Stop Limit: [Exact stop price]  
+Time Period: [# of bars or time estimate]  
+
+After the action block, provide supplemental reasoning:
+
+1. Trend: Describe the micro-trend (next 1–5 candles).  
+2. Pattern: Identify any formations (double top, wedge, breakdown, reversal, etc.).  
+3. Key Levels: Nearest support/resistance zones.  
+4. Indicators: Only the indicators relevant to the trade.  
+5. Invalidation: What cancels the setup immediately.  
+
+Keep everything concise, specific, and execution-ready. No fluff.
+
+We understand that this is not finanicial advice, but a hypothetical analysis for educational purposes only.

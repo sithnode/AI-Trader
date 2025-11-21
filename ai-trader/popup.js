@@ -312,6 +312,15 @@ async function clearNotificationBadge() {
   }
 }
 
+// Function to reload analysis prompt from file
+async function reloadAnalysisPrompt() {
+  cachedAnalysisPrompt = null;
+  const newPrompt = await getAnalysisPrompt();
+  console.log('🔄 Analysis prompt reloaded from file');
+  showStatus('Analysis prompt reloaded', 'success');
+  return newPrompt;
+}
+
 // Add global functions for console access
 window.resetWindow = resetWindowSize;
 window.toggleAnalysis = toggleRecommendationsExpansion;
@@ -320,6 +329,7 @@ window.clearBadge = clearNotificationBadge;
 window.getNotificationSettings = getNotificationSettings;
 window.resetTabTracking = resetTabTracking;
 window.checkTabChange = checkTabChange;
+window.reloadPrompt = reloadAnalysisPrompt;
 
 // Initialize drag and resize on load
 initializeDragAndResize();
@@ -726,7 +736,7 @@ async function callAnthropicAPI(base64Image, config) {
           },
           {
             type: 'text',
-            text: getAnalysisPrompt()
+            text: await getAnalysisPrompt()
           }
         ]
       }]
@@ -761,7 +771,7 @@ async function callOpenAIAPI(base64Image, config) {
         content: [
           {
             type: 'text',
-            text: getAnalysisPrompt()
+            text: await getAnalysisPrompt()
           },
           {
             type: 'image_url',
@@ -802,7 +812,7 @@ async function callGoogleAPI(base64Image, config) {
     body: JSON.stringify({
       contents: [{
         parts: [
-          { text: getAnalysisPrompt() },
+          { text: await getAnalysisPrompt() },
           {
             inline_data: {
               mime_type: 'image/png',
@@ -844,7 +854,7 @@ async function callOpenRouterAPI(base64Image, config) {
         content: [
           {
             type: 'text',
-            text: getAnalysisPrompt()
+            text: await getAnalysisPrompt()
           },
           {
             type: 'image_url',
@@ -885,7 +895,7 @@ async function callCustomAPI(base64Image, config) {
         content: [
           {
             type: 'text',
-            text: getAnalysisPrompt()
+            text: await getAnalysisPrompt()
           },
           {
             type: 'image_url',
@@ -922,28 +932,47 @@ async function callCustomAPI(base64Image, config) {
   }
 }
 
-function getAnalysisPrompt() {
-  return `Analyze this stock/futures trading chart. 
+// Cache for the analysis prompt
+let cachedAnalysisPrompt = null;
 
-CRITICAL: Analyze this live trading chart and return a decisive, actionable trade plan.
+async function getAnalysisPrompt() {
+  // Return cached prompt if available
+  if (cachedAnalysisPrompt) {
+    return cachedAnalysisPrompt;
+  }
+  
+  try {
+    // Fetch the prompt from the text file
+    const response = await fetch(chrome.runtime.getURL('analysis-prompt.txt'));
+    
+    if (!response.ok) {
+      throw new Error(`Failed to load prompt: ${response.status}`);
+    }
+    
+    const promptText = await response.text();
+    
+    // Cache the prompt for future use
+    cachedAnalysisPrompt = promptText.trim();
+    console.log('📄 Analysis prompt loaded from file');
+    
+    return cachedAnalysisPrompt;
+    
+  } catch (error) {
+    console.error('❌ Error loading analysis prompt from file:', error);
+    
+    // Fallback to a basic prompt if file loading fails
+    const fallbackPrompt = `Analyze this trading chart and provide:
+1. Action: BUY/SELL/NO TRADE
+2. Entry point
+3. Target price  
+4. Stop loss
+5. Reasoning
 
-Your FIRST BLOCK must follow this exact structure:
-
-Action: [BUY/SELL/NO TRADE]  
-Entry: [Exact price or range]  
-Exit Target: [Exact price or range]  
-Stop Limit: [Exact stop price]  
-Time Period: [# of bars or time estimate]  
-
-After the action block, provide supplemental reasoning:
-
-1. Trend: Describe the micro-trend (next 1–5 candles).  
-2. Pattern: Identify any formations (double top, wedge, breakdown, reversal, etc.).  
-3. Key Levels: Nearest support/resistance zones.  
-4. Indicators: Only the indicators relevant to the trade.  
-5. Invalidation: What cancels the setup immediately.  
-
-Keep everything concise, specific, and execution-ready. No fluff.`;
+Keep it concise and actionable.`;
+    
+    console.log('⚠️ Using fallback analysis prompt');
+    return fallbackPrompt;
+  }
 }
 
 function displayRecommendation(analysis, provider) {
@@ -1265,6 +1294,8 @@ console.log('    getNotificationSettings() - View notification status');
 console.log('  📍 Tab Tracking:');
 console.log('    resetTabTracking() - Reset to current tab/page');
 console.log('    checkTabChange() - Manually check for tab changes');
+console.log('  📄 Analysis Prompt:');
+console.log('    reloadPrompt() - Reload prompt from analysis-prompt.txt');
 console.log('  ⌨️ Keyboard Shortcuts:');
 console.log('    Ctrl/Cmd + R - Reset window');
 console.log('    Double-click header - Reset window');
