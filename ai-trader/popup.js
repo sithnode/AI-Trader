@@ -1029,7 +1029,7 @@ async function callOpenAITextPrompt(base64Image, config) {
           }
         ]
       }],
-      max_tokens: 2000
+      max_completion_tokens: 2000
     })
   });
   
