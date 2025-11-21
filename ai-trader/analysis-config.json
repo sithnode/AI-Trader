@@ -1,0 +1,24 @@
+{
+  "promptMethod": {
+    "default": "text-prompt",
+    "options": {
+      "text-prompt": {
+        "name": "Custom Text Prompt",
+        "description": "Uses the analysis-prompt.txt file or custom stored prompt",
+        "requiresPromptId": false
+      },
+      "predefined-prompt": {
+        "name": "OpenAI Predefined Prompt",
+        "description": "Uses OpenAI's predefined prompt model for structured responses", 
+        "requiresPromptId": true,
+        "defaultPromptId": "pmpt_691fec06402c81948b1c5bfb8428a8650a4fc102522c6833",
+        "defaultVersion": "1",
+        "supportedProviders": ["openai"]
+      }
+    }
+  },
+  "settings": {
+    "fallbackToTextPrompt": true,
+    "showPromptMethodInUI": true
+  }
+}

@@ -27,31 +27,36 @@ const providerConfigs = {
     name: 'Anthropic Claude',
     defaultModel: 'claude-sonnet-4-20250514',
     info: 'Anthropic Claude: State-of-the-art vision and reasoning',
-    endpoint: 'https://api.anthropic.com/v1/messages'
+    endpoint: 'https://api.anthropic.com/v1/messages',
+    supportsPromptMethods: ['text-prompt']
   },
   openai: {
     name: 'OpenAI GPT',
     defaultModel: 'gpt-4o',
     info: 'OpenAI GPT-4: Advanced vision model with strong multimodal capabilities',
-    endpoint: 'https://api.openai.com/v1/chat/completions'
+    endpoint: 'https://api.openai.com/v1/chat/completions',
+    supportsPromptMethods: ['text-prompt', 'predefined-prompt']
   },
   google: {
     name: 'Google Gemini',
     defaultModel: 'gemini-2.0-flash-exp',
     info: 'Google Gemini: Fast and efficient multimodal AI',
-    endpoint: 'https://generativelanguage.googleapis.com/v1/models'
+    endpoint: 'https://generativelanguage.googleapis.com/v1/models',
+    supportsPromptMethods: ['text-prompt']
   },
   openrouter: {
     name: 'OpenRouter',
     defaultModel: 'anthropic/claude-sonnet-4',
     info: 'OpenRouter: Access multiple AI models through one API',
-    endpoint: 'https://openrouter.ai/api/v1/chat/completions'
+    endpoint: 'https://openrouter.ai/api/v1/chat/completions',
+    supportsPromptMethods: ['text-prompt', 'predefined-prompt']
   },
   custom: {
     name: 'Custom API',
     defaultModel: '',
     info: 'Custom: Configure your own API endpoint',
-    endpoint: ''
+    endpoint: '',
+    supportsPromptMethods: ['text-prompt']
   }
 };
 
@@ -510,7 +515,8 @@ window.reloadPrompt = reloadPrompt;
 window.openPromptEditor = openPromptEditor;
 window.savePromptChanges = savePromptChanges;
 window.resetPromptToDefault = resetPromptToDefault;
-window.reloadPrompt = reloadAnalysisPrompt;
+window.getPromptConfig = getPromptConfig;
+window.setPromptMethod = setPromptMethod;
 
 // Initialize drag and resize on load
 initializeDragAndResize();
@@ -535,6 +541,13 @@ function initializeAnalysisControlButtons() {
   if (editPromptBtn) {
     editPromptBtn.addEventListener('click', openPromptEditor);
     console.log('✅ Edit prompt button listener attached');
+  }
+  
+  // Prompt method toggle button
+  const promptToggle = document.getElementById('promptMethodToggle');
+  if (promptToggle) {
+    promptToggle.addEventListener('click', togglePromptMethod);
+    console.log('✅ Prompt method toggle listener attached');
   }
   
   // Clear analyses button
@@ -978,6 +991,21 @@ async function callAnthropicAPI(base64Image, config) {
 
 async function callOpenAIAPI(base64Image, config) {
   console.log('🟢 Calling OpenAI API...');
+  
+  // Check prompt method preference
+  const storage = await chrome.storage.local.get(['promptMethod', 'promptId', 'promptVersion']);
+  const promptMethod = storage.promptMethod || 'text-prompt';
+  
+  if (promptMethod === 'predefined-prompt' && storage.promptId) {
+    return await callOpenAIPredefinedPrompt(base64Image, config, storage);
+  } else {
+    return await callOpenAITextPrompt(base64Image, config);
+  }
+}
+
+async function callOpenAITextPrompt(base64Image, config) {
+  console.log('📝 Using OpenAI text prompt method');
+  
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -1016,6 +1044,50 @@ async function callOpenAIAPI(base64Image, config) {
   const data = await response.json();
   console.log('✅ API response received');
   return data.choices[0].message.content;
+}
+
+async function callOpenAIPredefinedPrompt(base64Image, config, promptSettings) {
+  console.log('🎯 Using OpenAI predefined prompt method');
+  
+  const response = await fetch('https://api.openai.com/v1/responses', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${config.apiKey}`
+    },
+    body: JSON.stringify({
+      prompt: {
+        id: promptSettings.promptId,
+        version: promptSettings.promptVersion || '1'
+      },
+      inputs: {
+        chart_image: `data:image/png;base64,${base64Image}`
+      }
+    })
+  });
+  
+  console.log('📡 Predefined prompt response status:', response.status);
+  
+  if (!response.ok) {
+    const error = await response.json();
+    console.error('❌ Predefined prompt API error:', error);
+    
+    // Fallback to text prompt if predefined fails
+    console.log('🔄 Falling back to text prompt method');
+    return await callOpenAITextPrompt(base64Image, config);
+  }
+  
+  const data = await response.json();
+  console.log('✅ Predefined prompt response received');
+  
+  // Extract the response content
+  if (data.response && data.response.content) {
+    return data.response.content;
+  } else if (data.content) {
+    return data.content;
+  } else {
+    return JSON.stringify(data);
+  }
 }
 
 async function callGoogleAPI(base64Image, config) {
@@ -1152,8 +1224,47 @@ async function callCustomAPI(base64Image, config) {
   }
 }
 
-// Cache for the analysis prompt
+// Cache for the analysis prompt and configuration
 let cachedAnalysisPrompt = null;
+let cachedPromptConfig = null;
+
+// Load prompt configuration
+async function getPromptConfig() {
+  if (cachedPromptConfig) {
+    return cachedPromptConfig;
+  }
+  
+  try {
+    const response = await fetch(chrome.runtime.getURL('analysis-config.json'));
+    
+    if (!response.ok) {
+      throw new Error(`Failed to load config: ${response.status}`);
+    }
+    
+    cachedPromptConfig = await response.json();
+    console.log('⚙️ Prompt configuration loaded');
+    return cachedPromptConfig;
+    
+  } catch (error) {
+    console.error('❌ Error loading prompt config:', error);
+    
+    // Fallback config
+    const fallbackConfig = {
+      promptMethod: {
+        default: 'text-prompt',
+        options: {
+          'text-prompt': {
+            name: 'Custom Text Prompt',
+            description: 'Uses text-based prompts',
+            requiresPromptId: false
+          }
+        }
+      }
+    };
+    
+    return fallbackConfig;
+  }
+}
 
 async function getAnalysisPrompt() {
   // Return cached prompt if available
@@ -1523,6 +1634,162 @@ async function loadAndDisplayStoredSessions() {
   console.log(`📚 Displayed ${Math.min(sessions.length, 5)} stored sessions`);
 }
 
+// Prompt Method Management Functions
+async function setPromptMethod(method, promptId = null, version = '1') {
+  try {
+    const config = await getPromptConfig();
+    const validMethods = Object.keys(config.promptMethod.options);
+    
+    if (!validMethods.includes(method)) {
+      throw new Error(`Invalid prompt method. Valid options: ${validMethods.join(', ')}`);
+    }
+    
+    const methodConfig = config.promptMethod.options[method];
+    
+    if (methodConfig.requiresPromptId && !promptId) {
+      throw new Error(`Prompt method '${method}' requires a prompt ID`);
+    }
+    
+    // Save to storage
+    const storageData = { promptMethod: method };
+    if (promptId) {
+      storageData.promptId = promptId;
+      storageData.promptVersion = version;
+    }
+    
+    await chrome.storage.local.set(storageData);
+    
+    console.log(`✅ Prompt method set to: ${methodConfig.name}`);
+    showStatus(`Prompt method: ${methodConfig.name}`, 'success');
+    
+    return true;
+  } catch (error) {
+    console.error('❌ Error setting prompt method:', error);
+    showStatus(`Error: ${error.message}`, 'error');
+    return false;
+  }
+}
+
+async function getCurrentPromptMethod() {
+  try {
+    const storage = await chrome.storage.local.get(['promptMethod', 'promptId', 'promptVersion']);
+    const config = await getPromptConfig();
+    
+    const method = storage.promptMethod || config.promptMethod.default;
+    const methodConfig = config.promptMethod.options[method];
+    
+    return {
+      method: method,
+      name: methodConfig.name,
+      description: methodConfig.description,
+      promptId: storage.promptId || methodConfig.defaultPromptId,
+      version: storage.promptVersion || methodConfig.defaultVersion
+    };
+  } catch (error) {
+    console.error('❌ Error getting current prompt method:', error);
+    return null;
+  }
+}
+
+async function togglePromptMethod() {
+  const toggleBtn = document.getElementById('promptMethodToggle');
+  const toggleIcon = document.getElementById('toggleIcon');
+  const toggleText = document.getElementById('toggleText');
+  
+  if (!toggleBtn || !toggleIcon || !toggleText) {
+    console.error('❌ Toggle elements not found');
+    return;
+  }
+  
+  try {
+    // Add switching animation
+    toggleBtn.classList.add('switching');
+    
+    // Get current method
+    const currentMethod = await getCurrentPromptMethod();
+    const isTextMode = currentMethod.method === 'text-prompt';
+    
+    // Check if provider supports predefined prompts when switching to predefined
+    if (isTextMode) {
+      const config = await chrome.storage.local.get(['llmProvider']);
+      const provider = config.llmProvider;
+      
+      if (!provider) {
+        showStatus('❌ Please configure LLM provider first', 'error');
+        toggleBtn.classList.remove('switching');
+        return;
+      }
+      
+      const providerConfig = providerConfigs[provider];
+      if (!providerConfig || !providerConfig.supportsPromptMethods.includes('predefined-prompt')) {
+        showStatus(`❌ ${providerConfig.name} doesn't support predefined prompts`, 'error');
+        toggleBtn.classList.remove('switching');
+        return;
+      }
+      
+      // Switch to predefined prompt
+      const promptConfig = await getPromptConfig();
+      const predefinedConfig = promptConfig.promptMethod.options['predefined-prompt'];
+      
+      const success = await setPromptMethod(
+        'predefined-prompt', 
+        predefinedConfig.defaultPromptId, 
+        predefinedConfig.defaultVersion
+      );
+      
+      if (success) {
+        updateToggleUI('predefined-prompt');
+        showStatus('🎯 Switched to predefined prompt mode', 'success');
+      }
+    } else {
+      // Switch to text prompt
+      const success = await setPromptMethod('text-prompt');
+      
+      if (success) {
+        updateToggleUI('text-prompt');
+        showStatus('📝 Switched to text prompt mode', 'success');
+      }
+    }
+    
+  } catch (error) {
+    console.error('❌ Error toggling prompt method:', error);
+    showStatus('Error switching prompt method', 'error');
+  } finally {
+    // Remove switching animation
+    setTimeout(() => {
+      if (toggleBtn) {
+        toggleBtn.classList.remove('switching');
+      }
+    }, 300);
+  }
+}
+
+function updateToggleUI(method) {
+  const toggleBtn = document.getElementById('promptMethodToggle');
+  const toggleIcon = document.getElementById('toggleIcon');
+  const toggleText = document.getElementById('toggleText');
+  
+  if (!toggleBtn || !toggleIcon || !toggleText) return;
+  
+  // Remove existing classes
+  toggleBtn.classList.remove('text-mode', 'predefined-mode');
+  
+  if (method === 'predefined-prompt') {
+    toggleBtn.classList.add('predefined-mode');
+    toggleIcon.textContent = '🎯';
+    toggleText.textContent = 'AI';
+    toggleBtn.title = 'Currently using predefined prompts - Click to switch to text prompts';
+  } else {
+    toggleBtn.classList.add('text-mode');
+    toggleIcon.textContent = '📄';
+    toggleText.textContent = 'Text';
+    toggleBtn.title = 'Currently using text prompts - Click to switch to predefined prompts';
+  }
+}
+
+// Initialize prompt method toggle UI
+initializePromptMethodToggle();
+
 // Load stored sessions when popup opens
 loadAndDisplayStoredSessions();
 
@@ -1544,10 +1811,26 @@ getSessionStatistics().then(stats => {
   }
 });
 
+async function initializePromptMethodToggle() {
+  try {
+    const currentMethod = await getCurrentPromptMethod();
+    if (currentMethod) {
+      updateToggleUI(currentMethod.method);
+      console.log(`🎯 Initialized prompt toggle: ${currentMethod.name}`);
+    }
+  } catch (error) {
+    console.error('❌ Error initializing prompt method toggle:', error);
+    // Default to text mode if error
+    updateToggleUI('text-prompt');
+  }
+}
+
 // Add clear cache functionality (can be triggered via console or future UI)
 window.clearTodaysCache = clearTodaysCache;
 window.getSessionStats = getSessionStatistics;
 window.loadSessions = loadTodaysSessions;
+window.getCurrentPromptMethod = getCurrentPromptMethod;
+window.togglePromptMethod = togglePromptMethod;
 
 // Auto-start refresh if enabled
 chrome.storage.local.get(['refreshInterval'], (result) => {
@@ -1609,6 +1892,13 @@ console.log('  📄 Analysis Prompt:');
 console.log('    openPromptEditor() - Open prompt editor interface');
 console.log('    reloadPrompt() - Reload prompt from storage/file');
 console.log('    resetPromptToDefault() - Reset to default prompt');
+console.log('  🎯 Prompt Methods:');
+console.log('    togglePromptMethod() - Toggle between text and predefined prompts');
+console.log('    setPromptMethod(\'text-prompt\') - Use custom text prompts');
+console.log('    setPromptMethod(\'predefined-prompt\', \'prompt_id\') - Use OpenAI predefined prompts');
+console.log('    getCurrentPromptMethod() - Get current prompt method info');
+console.log('    getPromptConfig() - View all prompt configuration options');
+console.log('  🎮 Click the toggle button (📄 Text / 🎯 AI) to switch prompt methods');
 console.log('  🗑️ Clear Functions:');
 console.log('    clearAllAnalyses() - Clear all analyses (with confirmation)');
 console.log('    clearAllAnalysesQuick() - Clear all analyses (no confirmation)');

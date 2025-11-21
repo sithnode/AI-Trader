@@ -462,6 +462,69 @@
       opacity: 0.8;
       line-height: 1.4;
     }
+    
+    /* Prompt Method Toggle Styles */
+    .prompt-toggle-container {
+      display: flex;
+      align-items: center;
+    }
+    
+    .prompt-toggle {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      padding: 4px 8px;
+      font-size: 10px;
+      margin: 0;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      border-radius: 5px;
+      color: #fff;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      min-width: 60px;
+      justify-content: center;
+    }
+    
+    .prompt-toggle:hover {
+      background: rgba(255, 255, 255, 0.2);
+      border-color: rgba(255, 255, 255, 0.5);
+      transform: translateY(-1px);
+    }
+    
+    .prompt-toggle.predefined-mode {
+      background: rgba(255, 193, 7, 0.3);
+      border-color: rgba(255, 193, 7, 0.6);
+    }
+    
+    .prompt-toggle.predefined-mode:hover {
+      background: rgba(255, 193, 7, 0.4);
+      border-color: rgba(255, 193, 7, 0.8);
+    }
+    
+    .prompt-toggle.text-mode {
+      background: rgba(102, 126, 234, 0.3);
+      border-color: rgba(102, 126, 234, 0.6);
+    }
+    
+    .prompt-toggle.text-mode:hover {
+      background: rgba(102, 126, 234, 0.4);
+      border-color: rgba(102, 126, 234, 0.8);
+    }
+    
+    .toggle-icon {
+      font-size: 12px;
+    }
+    
+    .toggle-text {
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    
+    .prompt-toggle.switching {
+      opacity: 0.6;
+      pointer-events: none;
+    }
   </style>
 </head>
 <body>
@@ -536,6 +599,12 @@
       <div style="display: flex; gap: 5px;">
         <button class="btn-secondary" style="padding: 4px 8px; font-size: 10px; margin: 0; width: auto;" id="notificationToggle">🔔</button>
         <button class="btn-secondary" style="padding: 4px 8px; font-size: 10px; margin: 0; width: auto; background: rgba(102, 126, 234, 0.3);" title="Edit analysis prompt" id="editPromptBtn">📝</button>
+        <div class="prompt-toggle-container" title="Toggle prompt method">
+          <button class="prompt-toggle" id="promptMethodToggle">
+            <span class="toggle-icon" id="toggleIcon">📄</span>
+            <span class="toggle-text" id="toggleText">Text</span>
+          </button>
+        </div>
         <button class="btn-secondary" style="padding: 4px 8px; font-size: 10px; margin: 0; width: auto; background: rgba(244, 67, 54, 0.3);" title="Clear all analyses" id="clearAnalysesBtn">🗑️</button>
         <button class="btn-secondary" style="padding: 4px 8px; font-size: 10px; margin: 0; width: auto;" id="expandAnalysisBtn">📈 Expand</button>
       </div>

@@ -39,7 +39,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["analysis-prompt.txt"],
+      "resources": ["analysis-prompt.txt", "analysis-config.json"],
       "matches": ["<all_urls>"]
     }
   ]
