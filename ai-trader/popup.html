@@ -358,6 +358,110 @@
     .confidence-low {
       background: rgba(244, 67, 54, 0.3);
     }
+    
+    /* Prompt Editor Modal Styles */
+    .modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      z-index: 10002;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .modal-content {
+      background: #0f0f1e;
+      border-radius: 10px;
+      width: 90%;
+      max-width: 600px;
+      max-height: 80%;
+      display: flex;
+      flex-direction: column;
+      border: 2px solid rgba(255, 255, 255, 0.2);
+    }
+    
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 15px 20px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    }
+    
+    .modal-header h3 {
+      margin: 0;
+      font-size: 16px;
+    }
+    
+    .modal-close {
+      background: none;
+      border: none;
+      font-size: 24px;
+      color: #fff;
+      cursor: pointer;
+      padding: 0;
+      width: 30px;
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .modal-close:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 50%;
+    }
+    
+    .modal-body {
+      padding: 20px;
+      flex: 1;
+      overflow-y: auto;
+    }
+    
+    .modal-footer {
+      display: flex;
+      justify-content: space-between;
+      padding: 15px 20px;
+      border-top: 1px solid rgba(255, 255, 255, 0.2);
+      gap: 10px;
+    }
+    
+    #promptTextarea {
+      width: 100%;
+      min-height: 300px;
+      padding: 15px;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 13px;
+      line-height: 1.4;
+      resize: vertical;
+    }
+    
+    #promptTextarea:focus {
+      outline: none;
+      border-color: rgba(102, 126, 234, 0.6);
+      background: rgba(255, 255, 255, 0.15);
+    }
+    
+    .prompt-info {
+      margin-top: 10px;
+      padding: 10px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 5px;
+      border-left: 3px solid rgba(102, 126, 234, 0.6);
+    }
+    
+    .prompt-info small {
+      opacity: 0.8;
+      line-height: 1.4;
+    }
   </style>
 </head>
 <body>
@@ -430,13 +534,35 @@
     <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px; margin-bottom: 5px;">
       <label style="font-size: 12px; font-weight: 600;">📊 Analysis Results</label>
       <div style="display: flex; gap: 5px;">
-        <button class="btn-secondary" onclick="toggleNotifications()" style="padding: 4px 8px; font-size: 10px; margin: 0; width: auto;" id="notificationToggle">🔔</button>
-        <button class="btn-secondary" onclick="clearAllAnalyses()" style="padding: 4px 8px; font-size: 10px; margin: 0; width: auto; background: rgba(244, 67, 54, 0.3);" title="Clear all analyses">🗑️</button>
-        <button class="btn-secondary" onclick="toggleAnalysis()" style="padding: 4px 8px; font-size: 10px; margin: 0; width: auto;">📈 Expand</button>
+        <button class="btn-secondary" style="padding: 4px 8px; font-size: 10px; margin: 0; width: auto;" id="notificationToggle">🔔</button>
+        <button class="btn-secondary" style="padding: 4px 8px; font-size: 10px; margin: 0; width: auto; background: rgba(102, 126, 234, 0.3);" title="Edit analysis prompt" id="editPromptBtn">📝</button>
+        <button class="btn-secondary" style="padding: 4px 8px; font-size: 10px; margin: 0; width: auto; background: rgba(244, 67, 54, 0.3);" title="Clear all analyses" id="clearAnalysesBtn">🗑️</button>
+        <button class="btn-secondary" style="padding: 4px 8px; font-size: 10px; margin: 0; width: auto;" id="expandAnalysisBtn">📈 Expand</button>
       </div>
     </div>
     
     <div class="recommendations" id="recommendations"></div>
+  </div>
+  
+  <!-- Prompt Editor Modal -->
+  <div id="promptEditorModal" class="modal" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>📝 Edit Analysis Prompt</h3>
+        <button class="modal-close" id="closePromptEditor">&times;</button>
+      </div>
+      <div class="modal-body">
+        <label for="promptTextarea" style="font-size: 12px; font-weight: 600; margin-bottom: 10px; display: block;">Analysis Instructions:</label>
+        <textarea id="promptTextarea" placeholder="Loading current prompt..."></textarea>
+        <div class="prompt-info">
+          <small>💡 This prompt tells the AI how to analyze trading charts. Changes are saved automatically and used for all future analyses.</small>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="resetPromptBtn">🔄 Reset to Default</button>
+        <button class="btn-primary" id="savePromptBtn">💾 Save Changes</button>
+      </div>
+    </div>
   </div>
   
   <script src="popup.js"></script>

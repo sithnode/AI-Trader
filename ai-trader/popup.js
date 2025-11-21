@@ -343,6 +343,159 @@ async function reloadPrompt() {
   }
 }
 
+// Prompt Editor Functions
+function initializePromptEditor() {
+  const modal = document.getElementById('promptEditorModal');
+  const closeBtn = document.getElementById('closePromptEditor');
+  const saveBtn = document.getElementById('savePromptBtn');
+  const resetBtn = document.getElementById('resetPromptBtn');
+  
+  if (closeBtn) {
+    closeBtn.addEventListener('click', closePromptEditor);
+  }
+  
+  if (saveBtn) {
+    saveBtn.addEventListener('click', savePromptChanges);
+  }
+  
+  if (resetBtn) {
+    resetBtn.addEventListener('click', resetPromptToDefault);
+  }
+  
+  // Close modal when clicking outside
+  if (modal) {
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) {
+        closePromptEditor();
+      }
+    });
+  }
+  
+  console.log('📝 Prompt editor initialized');
+}
+
+async function openPromptEditor() {
+  const modal = document.getElementById('promptEditorModal');
+  const textarea = document.getElementById('promptTextarea');
+  
+  if (!modal || !textarea) {
+    console.error('❌ Prompt editor elements not found');
+    return;
+  }
+  
+  try {
+    // Load current prompt
+    textarea.value = 'Loading current prompt...';
+    modal.style.display = 'flex';
+    
+    const currentPrompt = await getAnalysisPrompt();
+    textarea.value = currentPrompt;
+    textarea.focus();
+    
+    console.log('📝 Prompt editor opened');
+    showStatus('📝 Prompt editor opened', 'info');
+    
+  } catch (error) {
+    console.error('❌ Error opening prompt editor:', error);
+    textarea.value = 'Error loading prompt. Please try again.';
+    showStatus('Error opening prompt editor', 'error');
+  }
+}
+
+function closePromptEditor() {
+  const modal = document.getElementById('promptEditorModal');
+  if (modal) {
+    modal.style.display = 'none';
+    console.log('📝 Prompt editor closed');
+  }
+}
+
+async function savePromptChanges() {
+  const textarea = document.getElementById('promptTextarea');
+  const saveBtn = document.getElementById('savePromptBtn');
+  
+  if (!textarea) {
+    console.error('❌ Prompt textarea not found');
+    return;
+  }
+  
+  const newPrompt = textarea.value.trim();
+  
+  if (!newPrompt) {
+    showStatus('❌ Prompt cannot be empty', 'error');
+    return;
+  }
+  
+  try {
+    // Save to chrome storage
+    await chrome.storage.local.set({ customAnalysisPrompt: newPrompt });
+    
+    // Clear cached prompt to force reload
+    cachedAnalysisPrompt = newPrompt;
+    
+    // Visual feedback
+    const originalText = saveBtn.textContent;
+    saveBtn.textContent = '✅ Saved!';
+    saveBtn.disabled = true;
+    
+    setTimeout(() => {
+      saveBtn.textContent = originalText;
+      saveBtn.disabled = false;
+      closePromptEditor();
+    }, 1500);
+    
+    showStatus('💾 Analysis prompt saved successfully', 'success');
+    console.log('💾 Prompt saved to storage, length:', newPrompt.length);
+    
+  } catch (error) {
+    console.error('❌ Error saving prompt:', error);
+    showStatus('Error saving prompt', 'error');
+  }
+}
+
+async function resetPromptToDefault() {
+  const textarea = document.getElementById('promptTextarea');
+  const resetBtn = document.getElementById('resetPromptBtn');
+  
+  if (!textarea) return;
+  
+  const confirmed = confirm('🔄 Reset to Default Prompt\n\nThis will restore the original analysis prompt and discard any custom changes.\n\nContinue?');
+  
+  if (!confirmed) return;
+  
+  try {
+    // Clear custom prompt from storage
+    await chrome.storage.local.remove(['customAnalysisPrompt']);
+    
+    // Clear cache and reload default
+    cachedAnalysisPrompt = null;
+    
+    // Load default prompt from file
+    const response = await fetch(chrome.runtime.getURL('analysis-prompt.txt'));
+    const defaultPrompt = await response.text();
+    
+    textarea.value = defaultPrompt.trim();
+    cachedAnalysisPrompt = defaultPrompt.trim();
+    
+    // Visual feedback
+    const originalText = resetBtn.textContent;
+    resetBtn.textContent = '✅ Reset!';
+    resetBtn.disabled = true;
+    
+    setTimeout(() => {
+      resetBtn.textContent = originalText;
+      resetBtn.disabled = false;
+    }, 1500);
+    
+    showStatus('🔄 Prompt reset to default', 'success');
+    console.log('🔄 Prompt reset to default');
+    
+  } catch (error) {
+    console.error('❌ Error resetting prompt:', error);
+    showStatus('Error resetting prompt', 'error');
+  }
+}
+
 // Add global functions for console access
 window.resetWindow = resetWindowSize;
 window.toggleAnalysis = toggleRecommendationsExpansion;
@@ -354,6 +507,9 @@ window.checkTabChange = checkTabChange;
 window.clearAllAnalyses = clearAllAnalyses;
 window.clearAllAnalysesQuick = clearAllAnalysesQuick;
 window.reloadPrompt = reloadPrompt;
+window.openPromptEditor = openPromptEditor;
+window.savePromptChanges = savePromptChanges;
+window.resetPromptToDefault = resetPromptToDefault;
 window.reloadPrompt = reloadAnalysisPrompt;
 
 // Initialize drag and resize on load
@@ -361,6 +517,45 @@ initializeDragAndResize();
 
 // Initialize tab tracking
 initializeTabTracking();
+
+// Initialize analysis control buttons
+initializeAnalysisControlButtons();
+
+// Initialize analysis control buttons
+function initializeAnalysisControlButtons() {
+  // Notification toggle button
+  const notificationToggle = document.getElementById('notificationToggle');
+  if (notificationToggle) {
+    notificationToggle.addEventListener('click', toggleNotifications);
+    console.log('✅ Notification toggle listener attached');
+  }
+  
+  // Edit prompt button
+  const editPromptBtn = document.getElementById('editPromptBtn');
+  if (editPromptBtn) {
+    editPromptBtn.addEventListener('click', openPromptEditor);
+    console.log('✅ Edit prompt button listener attached');
+  }
+  
+  // Clear analyses button
+  const clearAnalysesBtn = document.getElementById('clearAnalysesBtn');
+  if (clearAnalysesBtn) {
+    clearAnalysesBtn.addEventListener('click', clearAllAnalyses);
+    console.log('✅ Clear analyses button listener attached');
+  }
+  
+  // Expand analysis button
+  const expandAnalysisBtn = document.getElementById('expandAnalysisBtn');
+  if (expandAnalysisBtn) {
+    expandAnalysisBtn.addEventListener('click', toggleRecommendationsExpansion);
+    console.log('✅ Expand analysis button listener attached');
+  }
+  
+  // Initialize prompt editor modal events
+  initializePromptEditor();
+  
+  console.log('🎮 Analysis control buttons initialized');
+}
 
 // Configuration collapse/expand handler
 const configHeader = document.getElementById('configHeader');
@@ -967,7 +1162,16 @@ async function getAnalysisPrompt() {
   }
   
   try {
-    // Fetch the prompt from the text file
+    // First check for custom prompt in storage
+    const storage = await chrome.storage.local.get(['customAnalysisPrompt']);
+    
+    if (storage.customAnalysisPrompt && storage.customAnalysisPrompt.trim()) {
+      cachedAnalysisPrompt = storage.customAnalysisPrompt.trim();
+      console.log('📄 Analysis prompt loaded from custom storage');
+      return cachedAnalysisPrompt;
+    }
+    
+    // Fallback to file if no custom prompt
     const response = await fetch(chrome.runtime.getURL('analysis-prompt.txt'));
     
     if (!response.ok) {
@@ -1216,7 +1420,7 @@ async function clearAllAnalyses() {
       console.log('🗑️ All analyses cleared successfully');
       
       // Brief visual feedback
-      const trashBtn = document.querySelector('button[onclick="clearAllAnalyses()"]');
+      const trashBtn = document.getElementById('clearAnalysesBtn');
       if (trashBtn) {
         const originalBg = trashBtn.style.background;
         trashBtn.style.background = 'rgba(76, 175, 80, 0.5)';
@@ -1402,11 +1606,14 @@ console.log('  📍 Tab Tracking:');
 console.log('    resetTabTracking() - Reset to current tab/page');
 console.log('    checkTabChange() - Manually check for tab changes');
 console.log('  📄 Analysis Prompt:');
-console.log('    reloadPrompt() - Reload prompt from analysis-prompt.txt');
+console.log('    openPromptEditor() - Open prompt editor interface');
+console.log('    reloadPrompt() - Reload prompt from storage/file');
+console.log('    resetPromptToDefault() - Reset to default prompt');
 console.log('  🗑️ Clear Functions:');
 console.log('    clearAllAnalyses() - Clear all analyses (with confirmation)');
 console.log('    clearAllAnalysesQuick() - Clear all analyses (no confirmation)');
 console.log('    clearTodaysCache() - Clear today\'s cached sessions only');
+console.log('  📝 Click the edit button (📝) or use openPromptEditor() to customize instructions');
 console.log('  ⌨️ Keyboard Shortcuts:');
 console.log('    Ctrl/Cmd + R - Reset window');
 console.log('    Double-click header - Reset window');
